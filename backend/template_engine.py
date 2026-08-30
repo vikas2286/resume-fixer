@@ -609,6 +609,31 @@ def _shape_education(sections: list) -> list:
                 "educat" in (sec.get("title") or "").lower()
                 or "academ" in (sec.get("title") or "").lower()):
             continue
+        # Score-only entries: right-rail rows like 'CGPA: 8.9/10' can parse
+        # as their OWN education entry (read top-to-bottom they trail the
+        # degree row).  They belong to the entry ABOVE - merge into its meta
+        # so the shaper consumes the score into the right-aligned rail cell
+        # under the date (Nirgun: CGPA rendered as a stray left row).
+        merged = []
+        for e in sec.get("entries") or []:
+            prev = merged[-1] if merged else None
+            ti = re.sub(r"[\u200b\u200c\u200d\ufeff]", "",
+                        (e.get("title") or "")).strip()
+            if (prev is not None and ti
+                    and not (e.get("meta") or "").strip()
+                    and not (e.get("date") or "").strip()
+                    and not (e.get("bullets") or [])
+                    and (_CGPA_RE.search(ti) or _PCT_RE.search(ti))
+                    and ((prev.get("title") or "").strip()
+                         or (prev.get("edu") or {}).get("degree"))):
+                # never duplicate the score on a re-shape pass
+                if not ((prev.get("edu") or {}).get("score") or "").strip():
+                    prev["meta"] = ((prev.get("meta") or "").rstrip(" \u00b7")
+                                    + " \u00b7 " + ti).strip()
+                continue
+            e["title"] = ti
+            merged.append(e)
+        sec["entries"] = merged
         for e in sec.get("entries") or []:
             school = degree = location = score = ""
             # idempotency: render_html runs the shaper on every attempt of
@@ -616,6 +641,21 @@ def _shape_education(sections: list) -> list:
             # have consumed meta/bullets into e["edu"]; without this guard
             # the second pass finds no score candidate and drops it
             # (Vinod: '93%'/'93.80%' vanished from the rendered rail).
+            # invisible zero-width chars (PDF extraction artifacts) break
+            # the score/scale regexes ('8.9/\u200b10') - strip them first
+            e["meta"] = re.sub(r"[\u200b\u200c\u200d\ufeff]", "",
+                               e.get("meta") or "")
+            # dangling month fragment: a column-merged date can split at the
+            # wrong point, stranding 'MM/' on the degree title while the date
+            # lost its month ('B.Tech 08/' + '2023 - Present').  Re-attach so
+            # the rail shows the full '08/2023 - Present'.
+            _ti = (e.get("title") or "").strip()
+            _dt = (e.get("date") or "").strip()
+            _mf = re.search(r"(\d{1,2}/)\s*$", _ti)
+            if _mf and re.match(r"^(19|20)\d{2}\b", _dt) \
+                    and not _dt.startswith(_mf.group(1)):
+                e["title"] = _ti[:_mf.start()].rstrip()
+                e["date"] = _mf.group(1) + _dt
             prev_edu = e.get("edu") or {}
             meta_raw = e.get("meta") or ""
             meta_parts = [p for p in re.split(r";|\s+\u00b7\s+", meta_raw)
@@ -626,7 +666,7 @@ def _shape_education(sections: list) -> list:
             cand += [("meta", p) for p in meta_parts]
             cand += [("bullet", b) for b in e.get("bullets") or []]
             for src, raw_c in cand:
-                c = raw_c.strip()
+                c = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", raw_c).strip()
                 if not c:
                     continue
                 sm = _CGPA_RE.search(c) or _PCT_RE.search(c)
