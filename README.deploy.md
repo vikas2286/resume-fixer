@@ -52,10 +52,14 @@ commit `.env` — `.gitignore` protects it; verify with `git status --ignored`.)
    - (optional) `GEMINI_MODEL` default is already `gemini-3.5-flash-lite`
 5. Click **Manual Deploy → Deploy latest commit**. Wait for "Live".
 6. The frontend's `VITE_API_URL` build-time env var points to the deployed backend
-   (`https://resume-fixer-backend.onrender.com`) via `render.yaml`. Render's Blueprint
-   `fromService` refs only expose a scheme-less `host` (no `url` property, and no
-   `RENDER_EXTERNAL_URL` default var), so the full URL is pinned in `render.yaml` —
-   override it in the dashboard (Environment → Build) if your subdomain differs.
+   (`https://resume-fixer-backend-mib0.onrender.com`) via `render.yaml`. The backend's
+   `ALLOWED_ORIGINS` is pinned to the real frontend URL
+   (`https://resume-fixer-frontend.onrender.com`).
+
+> **Real URLs:** both subdomains come from the Render dashboard. `*.onrender.com`
+> subdomains are globally unique and the canonical `resume-fixer-backend` was taken
+> by an unrelated app, so our backend was assigned a hash suffix (`-mib0`). Always
+> copy the exact URL from the dashboard rather than assuming.
 
 > **Docker build context:** the backend service in `render.yaml` sets
 > `dockerfilePath: ./backend/Dockerfile` and `dockerContext: ./backend`
@@ -63,11 +67,12 @@ commit `.env` — `.gitignore` protects it; verify with `git status --ignored`.)
 > repository root for docker builds (a bare `Dockerfile` at the top level
 > is NOT assumed). If you ever move the Dockerfile, update both paths.
 >
-> **Static publish path:** the frontend service uses
-> `staticPublishPath: ./frontend/dist` (schema: "relative to the repo root")
-> — NOT `publishPath: dist` (previous field names are rejected: "field
-> publishPath not found in type file.Service"). `rootDir: frontend` only
-> sets the build directory; the publish path is repo-root-relative.
+> **Static publish path:** the frontend service uses `staticPublishPath: ./dist`
+> and `rootDir: frontend`. Empirically, when `rootDir` is set Render resolves the
+> publish path RELATIVE TO rootDir (a repo-root-relative `./frontend/dist` fails
+> with "Publish directory does not exist!" even though the build produced
+> `frontend/dist`). The build command (`npm ci && npm run build`) runs inside
+> `rootDir` and outputs `dist/`, so `staticPublishPath: ./dist` is correct here.
 >
 > **Single instance:** sessions are in-memory (2h TTL). Keep the backend on
 > **1 instance** (Render free tier default) — scaling to >1 breaks session
