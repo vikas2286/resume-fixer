@@ -20,7 +20,6 @@
   .contacts { text-align: center; font-size: 10pt; color: #333333;
               margin-top: 3px; }
   .ico { color: #333333; font-size: 8pt; }
-  .rule { border-bottom: 1.5px solid #333333; margin: 6px 0 6px 0; }
   h2 { font-family: 'cmu-serif-b'; font-weight: normal;
        font-size: 10.5pt; color: #1a1a1a; text-transform: uppercase;
        letter-spacing: 1px; border-bottom: 0.75px solid #c9c9c9;
@@ -58,7 +57,6 @@
   <div class="name">{{ name }}</div>
   {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
   {% if contacts_html %}<div class="contacts">{{ contacts_html }}</div>{% endif %}
-  <div class="rule"></div>
 
   {% for sec in sections %}
     <h2>{{ sec.title | upper }}</h2>

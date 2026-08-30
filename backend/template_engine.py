@@ -770,7 +770,15 @@ BULLET_MODE_OVERRIDE = {"v": None}
 def _bullet_mode() -> str:
     if BULLET_MODE_OVERRIDE["v"]:
         return BULLET_MODE_OVERRIDE["v"]
-    return "native" if ("dejavu" in available_fonts()) else "ascii"
+    if "dejavu" not in available_fonts():
+        return "ascii"
+    # WeasyPrint draws <ul> list markers with the li's font (cmu-serif), NOT
+    # the ul's resume-unicode; U+2022 does not exist in Computer Modern, so
+    # the marker mis-maps to a stray glyph ("Î"/"9"/"Â").  The span branch
+    # always draws the marker explicitly with the DejaVu family -> correct
+    # bullet on both engines.  xhtml2pdf keeps the native <ul> branch (its
+    # bulletFontName mapping works and pixel tests pass).
+    return "span" if _HAS_WEASYPRINT else "native"
 
 
 def set_bullet_mode(mode: str | None) -> None:
