@@ -54,6 +54,12 @@ commit `.env` — `.gitignore` protects it; verify with `git status --ignored`.)
 6. The frontend's `VITE_API_URL` is wired to the backend via `render.yaml`
    (`fromService`), so no manual linking needed.
 
+> **Docker build context:** the backend service in `render.yaml` sets
+> `dockerfilePath: ./backend/Dockerfile` and `dockerContext: ./backend`
+> — both repo-root-relative — because Render resolves these against the
+> repository root for docker builds (a bare `Dockerfile` at the top level
+> is NOT assumed). If you ever move the Dockerfile, update both paths.
+>
 > **Single instance:** sessions are in-memory (2h TTL). Keep the backend on
 > **1 instance** (Render free tier default) — scaling to >1 breaks session
 > stickiness. Fine for demos/judging.

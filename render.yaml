@@ -6,8 +6,12 @@ services:
   - type: web
     name: resume-fixer-backend
     runtime: docker
-    rootDir: backend
-    dockerfilePath: ./Dockerfile
+    # Paths are repo-root-relative.  The observed error ('open Dockerfile:
+    # no such file or directory') proved Render resolved the Dockerfile
+    # against the REPO ROOT (not rootDir) for docker builds, so point both
+    # the Dockerfile and the build context explicitly at backend/.
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     plan: free
     healthCheckPath: /health
     envVars:
@@ -31,7 +35,7 @@ services:
     envVars:
       # Build-time var consumed by src/api/client.js (import.meta.env.VITE_API_URL).
       - key: VITE_API_URL
-        value: fromService:
+        fromService:
           name: resume-fixer-backend
           type: web
           property: url
