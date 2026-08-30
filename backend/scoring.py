@@ -107,7 +107,10 @@ def ats_score(parsed: dict) -> dict:
 
 # ---------------------------------------------------------------- visual score
 
-_LATEX_FONT_RE = re.compile(r"^(cm|lm)[a-z]{0,4}\d*$")  # cmr10, cmbx12, lmr...
+# LaTeX-family fonts: classic TeX embedding (cmr10, cmbx12, lmr) AND
+# OpenType Computer Modern style variants (cmuserif-roman, cmuserif-b_10)
+# that xhtml2pdf/WeasyPrint embed when rendering the LaTeX-style templates.
+_LATEX_FONT_RE = re.compile(r"^(cm|lm)[a-z]{0,6}(?:[-_][a-z0-9]+)*\d*$")
 # Decorative icon/brand fonts carry only single glyphs (LinkedIn, GitHub
 # marks) - they never render body text, so they are irrelevant to both the
 # ATS font check and the visual family count.

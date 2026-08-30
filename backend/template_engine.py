@@ -782,10 +782,19 @@ def set_bullet_mode(mode: str | None) -> None:
 def font_face_css() -> str:
     """@font-face rules for the vendored TTFs ('' when files are missing).
 
-    Requires the xhtml2pdf Windows bridge below; harmless otherwise."""
+    xhtml2pdf wants a plain local path (its bridge stats the file); WeasyPrint
+    resolves url() against the string document's base URL, so it needs an
+    absolute file:// URL - otherwise the CMU fonts silently fall back to the
+    system default (DejaVu on Linux) and the PDF loses its LaTeX look.
+    """
     if not available_fonts():
         return ""
     fams = {_FONT_FILES[k][1]: p for k, p in available_fonts().items()}
+    if _HAS_WEASYPRINT:
+        return "\n".join(
+            "@font-face { font-family: \"%s\"; src: url('file:///%s'); }"
+            % (fam, path.replace("\\", "/").lstrip("/"))
+            for fam, path in fams.items())
     return "\n".join(
         "@font-face { font-family: \"%s\"; src: url('%s'); }"
         % (fam, path.replace("\\", "/")) for fam, path in fams.items())

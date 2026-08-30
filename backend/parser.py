@@ -317,7 +317,8 @@ STANDARD_FONTS = {
     "arial", "helvetica", "calibri", "cambria", "times", "times new roman",
     "georgia", "garamond", "verdana", "tahoma", "trebuchet ms", "lato",
     "open sans", "roboto", "source sans", "noto sans", "segoe ui",
-    "liberation serif", "liberation sans", "dejavu sans", "dejavu serif",
+    "liberation serif", "liberation sans", "dejavu", "dejavu sans",
+    "dejavu serif",
 }
 
 
@@ -567,7 +568,7 @@ def _layout_signals(lines: list, n_pages: int) -> dict:
     footer_lines = [l["text"] for l in lines if l.get("y_bot_pct", 0) > 0.93]
     hf_blob = "\n".join(header_lines + running_headers
                         + footer_lines).lower()
-    contact_in_hf = bool(EMAIL_RE.search(hf_blob) or PHONE_RE.search(hf_blob))
+    contact_in_hf = bool(EMAIL_RE.search(hf_blob) or _find_phone(hf_blob))
     # A contact line at the top of page 1 is the standard letterhead - only
     # flag it when the contact ALSO appears in the body, on later pages
     # (running headers) or in a footer; those are what ATS tools skip.
@@ -576,7 +577,7 @@ def _layout_signals(lines: list, n_pages: int) -> dict:
                               if 0.07 <= l.get("y_top_pct", 1)
                               <= 0.93).lower()
         contact_in_hf = bool(EMAIL_RE.search(body_blob)
-                             or PHONE_RE.search(body_blob))
+                             or _find_phone(body_blob))
 
     return {
         "multicolumn": multicolumn,
