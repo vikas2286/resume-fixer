@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  {{ font_css }}
+  @page { size: A4; margin: 10mm 14mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: {{ fs }};
+         color: #222222; line-height: {{ lh }}; }
+  .name { font-size: {{ name_fs }}; font-weight: bold; letter-spacing: 0.5px;
+          color: #1a1a1a; text-align: center; }
+  .headline { font-size: 10.5pt; color: #444444; text-align: center;
+              margin-top: 1px; }
+  .contacts { text-align: center; font-size: 10pt; color: #555555;
+              margin-top: 3px; }
+  /* B.4: real icon glyphs at 8pt, monochrome, no chip boxes */
+  .ico { color: #333333; font-size: 8pt; }
+  .rule { border-bottom: 1.5px solid #333333; margin: 6px 0 6px 0; }
+  h2 { font-size: 10.5pt; color: #1a1a1a; text-transform: uppercase;
+       letter-spacing: 1px; border-bottom: 0.75px solid #c9c9c9;
+       padding-bottom: 2px; margin: {{ h2m }}; }
+  .entry { margin-bottom: {{ em }}; }
+  .entry-title { font-weight: bold; }
+  .entry-meta { color: #555555; }
+  div.entry-meta { margin-top: 1px; }
+  /* title row as a table: left cell = title/meta, right cell pinned to the
+     right margin holds the project Link and date regardless of title length */
+  table.trow { width: 100%; border-spacing: 0; }
+  table.trow td { padding: 0; vertical-align: top; }
+  td.tl { text-align: left; width: 76%; }
+  td.tr { text-align: right; white-space: nowrap; width: 24%; }
+  .entry-date { color: #555555; font-size: 10pt; }
+  a { color: #2b5288; text-decoration: none; }
+  a.entry-link { color: #2b5288; font-weight: bold; }
+  ul { margin: 3px 0 0 13px; }
+  li { margin-bottom: 2px; margin-left: 15px; text-indent: -15px; }
+  {% if bmark_mode == 'native' %}  /* B.5: markers draw with DejaVu -> real */
+  ul { font-family: 'resume-unicode'; }{% endif %}
+  /* B.5 span fallback (list-style none semantics) */
+  .bl { margin: 3px 0 0 13px; }
+  .bli { margin-bottom: 2px; margin-left: 12px; text-indent: -12px; }
+  .bmark { {% if bmark_mode == 'span' %}font-family: 'resume-unicode';
+           color: #222222;{% else %}color: #555555;{% endif %} }
+  .para { margin-top: 1px; }
+  .skills p { margin: 1px 0; font-size: 10pt; }
+  .skills .label { font-weight: bold; }
+</style>
+</head>
+<body>
+  <div class="name">{{ name }}</div>
+  {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
+  {% if contacts_html %}<div class="contacts">{{ contacts_html }}</div>{% endif %}
+  <div class="rule"></div>
+
+  {% for sec in sections %}
+    <h2>{{ sec.title }}</h2>
+    {% if sec.type == "paragraph" %}
+      <p class="para">{{ sec.text_html }}</p>
+    {% elif sec.type == "skills" %}
+      <div class="skills">
+        {% for row in sec["skill_rows"] %}<p>{% if row.label %}<span class="label">{{ row.label }}:</span> {{ row.rest }}{% else %}{{ row.rest }}{% endif %}</p>{% endfor %}
+      </div>
+    {% else %}
+      {% for e in sec["entries"] %}
+        <div class="entry">
+          <table class="trow"><tr>
+            <td class="tl"><span class="entry-title">{{ e.title }}</span>{% if e.meta and e.bullets_html %} <span class="entry-meta">&mdash; {{ e.meta }}</span>{% endif %}</td>
+            <td class="tr">{% if e.link_href %}<a class="entry-link" href="{{ e.link_href }}">{{ e.link_label }}</a>{% endif %}{% if e.date %} <span class="entry-date">{{ e.date }}</span>{% endif %}{% if e.get('edu') and e.edu.score_display %} <span class="entry-date">{{ e.edu.score_display }}</span>{% endif %}</td>
+          </tr></table>
+          {% if e.meta and not e.bullets_html %}<div class="entry-meta">{{ e.meta }}</div>{% endif %}
+          {% if e.bullets_html %}
+            {% if bmark_mode == 'native' %}
+            <ul>
+              {% for b in e.bullets_html %}<li>{{ b }}</li>{% endfor %}
+            </ul>
+            {% elif bmark_mode == 'span' %}
+            <div class="bl">
+              {% for b in e.bullets_html %}<p class="bli"><span
+                class="bmark">&#8226;</span>&nbsp;&nbsp;{{ b }}</p>{% endfor %}
+            </div>
+            {% else %}
+            <div class="bl">
+              {% for b in e.bullets_html %}<p class="bli"><span
+                class="bmark">-</span>&nbsp;&nbsp;{{ b }}</p>{% endfor %}
+            </div>
+            {% endif %}
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endfor %}
+</body>
+</html>

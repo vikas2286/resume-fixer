@@ -1,0 +1,12 @@
+# Keep the Docker build context lean and never bake secrets / fixtures.
+.env
+.env.example
+*.log
+__pycache__/
+*.pyc
+*.pdf
+messy_resume.docx
+*_fixed.pdf
+test_fixed_output.pdf
+Dockerfile
+README*.md

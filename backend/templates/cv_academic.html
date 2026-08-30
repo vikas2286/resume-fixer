@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  {{ font_css }}
+  /* MODE A - academic CV (Kanish/Sarthak LaTeX-style originals are the bar).
+     Serif Computer Modern, tight density, institution-first education,
+     bold reserved for entity names + standout metrics. */
+  @page { size: A4; margin: 9mm 11mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'cmu-serif', Georgia, serif; font-size: {{ fs }};
+         color: #1a1a1a; line-height: {{ lh }}; }
+  strong, b { font-family: 'cmu-serif-b'; font-weight: normal; }
+  i, em { font-family: 'cmu-serif-i'; font-weight: normal; }
+  .name { font-family: 'cmu-serif-b'; font-size: {{ name_fs }};
+          color: #111111; text-align: center; letter-spacing: 0.5px; }
+  .contacts { text-align: center; font-size: 9.5pt; color: #333333;
+              margin-top: 2px; }
+  .ico { color: #333333; font-size: 8pt; }
+  .toprule { border-bottom: 0.75px solid #333333; margin: 4px 0 0 0; }
+  h2 { font-size: 10.5pt; font-weight: normal; color: #1a1a1a;
+       text-transform: uppercase; letter-spacing: 1.2px;
+       border-bottom: 0.75px solid #444444; padding-bottom: 2px;
+       margin: {{ h2m }}; }
+  .entry { margin-bottom: {{ em }}; }
+  .trest { font-weight: normal; }
+  .entry-meta { color: #333333; margin-top: 1px;
+                font-family: 'cmu-serif-i'; }
+  .edu-degree { margin-top: 1px; font-family: 'cmu-serif-i'; }
+  .stag { font-family: 'cmu-serif-i'; color: #333333; }
+  table.trow { width: 100%; border-spacing: 0; }
+  table.trow td { padding: 0; vertical-align: top; }
+  td.tl { text-align: left; width: 76%; }
+  td.tr { text-align: right; white-space: nowrap; color: #333333; width: 24%; }
+  /* education rows: the 'location · date' right cell is wider than the
+     entry-date cells - at 24% xhtml2pdf wraps it to a second line
+     ('Punjab, India · Sep 2022-Present').  32% keeps it on one line. */
+  td.edu-tl { width: 68%; }
+  td.edu-tr { width: 32%; }
+  a { color: #1a3f6f; text-decoration: none; }
+  .tlong { font-size: 9pt; }
+  .extbadge { font-family: 'cmu-serif-i'; font-size: 9pt; color: #333333;
+              margin-top: 1px; }
+  .bl { margin: 2px 0 0 0; }
+  .bli { margin: 1.5px 0 1.5px 12px; text-indent: -12px; }
+  .bmark { font-family: 'resume-unicode'; font-size: 7.5pt;
+           color: #1a1a1a; }
+  .para { margin-top: 1px; }
+  .skills p { margin: 1px 0; font-size: 10pt; }
+  .skills .label { font-family: 'cmu-serif-b'; font-weight: normal; }
+</style>
+</head>
+<body>
+  <div class="name">{{ name }}</div>
+  {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
+  {% if contacts_html %}<div class="contacts">{{ contacts_html }}</div>{% endif %}
+  <div class="toprule"></div>
+
+  {% for sec in sections %}
+    <h2>{{ sec.title | upper }}</h2>
+    {% if sec.type == "paragraph" %}
+      <p class="para">{{ sec.text_html }}</p>
+    {% elif sec.type == "skills" %}
+      <div class="skills">
+        {% for row in sec["skill_rows"] %}<p>{% if row.label %}<span class="label">{{ row.label }}:</span> {{ row.rest }}{% else %}{{ row.rest }}{% endif %}</p>{% endfor %}
+      </div>
+    {% elif sec.get('key') == 'education' or 'educat' in (sec.title | lower) %}
+      {% for e in sec["entries"] %}
+        <div class="entry">
+          <table class="trow">
+            <tr>
+              <td class="tl edu-tl" style="width: 68%;">{% if e.edu.school %}<strong>{{ e.edu.school }}</strong>{% endif %}</td>
+              <td class="tr edu-tr" style="width: 32%;">{{ e.edu.location }}{% if e.edu.location and e.date %} &middot; {% endif %}{{ e.date }}</td>
+            </tr>
+            {% if e.edu.degree or e.edu.score_display %}<tr>
+              <td class="tl edu-tl" style="width: 68%;">{% if e.edu.degree %}<span class="edu-degree">{{ e.edu.degree }}</span>{% endif %}</td>
+              <td class="tr edu-tr" style="width: 32%;">{% if e.edu.score_display %}<span class="edu-score">{{ e.edu.score_display }}</span>{% endif %}</td>
+            </tr>{% endif %}
+          </table>
+          {% if e.edu.bullets %}
+            <div class="bl">
+              {% for b in e.edu.bullets %}<p class="bli"><span class="bmark">&#8226;</span>&nbsp;&nbsp;{{ b }}</p>{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      {% for e in sec["entries"] %}
+        <div class="entry">
+          <table class="trow"><tr>
+            <td class="tl">{% if e.get('title_long') %}<span class="tlong">{{ e.title_html }}</span>{% else %}{{ e.title_html }}{% endif %}</td>
+            <td class="tr">{% if e.get('status_tag') %}<span class="stag">{{ e.get('status_tag') }}</span> {% endif %}{% if e.link_href %}<a href="{{ e.link_href }}">{{ e.link_label }}</a> {% endif %}{{ e.date }}</td>
+          </tr></table>
+          {% if e.get('ext_badge') %}<div class="extbadge">{{ e.get('ext_badge') }}</div>{% endif %}
+          {% if e.meta or e.get('location') %}<div class="entry-meta">{{ e.meta }}{% if e.meta and e.get('location') %} &middot; {% endif %}{{ e.get('location', '') }}</div>{% endif %}
+          {% if e.bullets_html %}
+            <div class="bl">
+              {% for b in e.bullets_html %}<p class="bli"><span class="bmark">&#8226;</span>&nbsp;&nbsp;{{ b }}</p>{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endfor %}
+</body>
+</html>

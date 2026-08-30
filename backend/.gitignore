@@ -1,0 +1,7 @@
+.env.example
+.env
+__pycache__/
+*.pyc
+*.log
+messy_resume.pdf
+test_fixed_output.pdf
