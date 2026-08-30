@@ -31,11 +31,12 @@ services:
     runtime: static
     rootDir: frontend
     buildCommand: npm ci && npm run build
-    publishPath: dist
+    staticPublishPath: ./frontend/dist
     envVars:
       # Build-time var consumed by src/api/client.js (import.meta.env.VITE_API_URL).
+      # NOTE: Render's fromService refs only expose 'host' (scheme-less hostname) and
+      # there is no RENDER_EXTERNAL_URL default var, so the deployed backend URL is
+      # pinned here. If Render assigns a different subdomain, update this value (or
+      # override VITE_API_URL in the dashboard -> Environment -> Build time).
       - key: VITE_API_URL
-        fromService:
-          name: resume-fixer-backend
-          type: web
-          property: url
+        value: https://resume-fixer-backend.onrender.com

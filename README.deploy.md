@@ -51,14 +51,23 @@ commit `.env` — `.gitignore` protects it; verify with `git status --ignored`.)
    - `ALLOWED_ORIGINS` → `https://resume-fixer-frontend.onrender.com`
    - (optional) `GEMINI_MODEL` default is already `gemini-3.5-flash-lite`
 5. Click **Manual Deploy → Deploy latest commit**. Wait for "Live".
-6. The frontend's `VITE_API_URL` is wired to the backend via `render.yaml`
-   (`fromService`), so no manual linking needed.
+6. The frontend's `VITE_API_URL` build-time env var points to the deployed backend
+   (`https://resume-fixer-backend.onrender.com`) via `render.yaml`. Render's Blueprint
+   `fromService` refs only expose a scheme-less `host` (no `url` property, and no
+   `RENDER_EXTERNAL_URL` default var), so the full URL is pinned in `render.yaml` —
+   override it in the dashboard (Environment → Build) if your subdomain differs.
 
 > **Docker build context:** the backend service in `render.yaml` sets
 > `dockerfilePath: ./backend/Dockerfile` and `dockerContext: ./backend`
 > — both repo-root-relative — because Render resolves these against the
 > repository root for docker builds (a bare `Dockerfile` at the top level
 > is NOT assumed). If you ever move the Dockerfile, update both paths.
+>
+> **Static publish path:** the frontend service uses
+> `staticPublishPath: ./frontend/dist` (schema: "relative to the repo root")
+> — NOT `publishPath: dist` (previous field names are rejected: "field
+> publishPath not found in type file.Service"). `rootDir: frontend` only
+> sets the build directory; the publish path is repo-root-relative.
 >
 > **Single instance:** sessions are in-memory (2h TTL). Keep the backend on
 > **1 instance** (Render free tier default) — scaling to >1 breaks session
