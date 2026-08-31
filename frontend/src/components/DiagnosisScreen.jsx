@@ -113,10 +113,21 @@ function Evidence({ parsed }) {
 export default function DiagnosisScreen({ parsed, scores, gemini, template,
                                           setTemplate, busy, onRedFlags,
                                           onFix, onRewrite, rewrittenCount,
-                                          fixAssessment }) {
+                                          fixAssessment, usage }) {
   if (!scores) return null;
   const minorMode = fixAssessment && !fixAssessment.needs_major_fix;
   const suggestions = (minorMode && fixAssessment.minor_suggestions) || [];
+
+  // Daily AI usage: show remaining actions and disable the AI-powered
+  // buttons once the limit is hit.  Admins (usage.admin) see nothing.
+  const limitHit = !!(usage && !usage.admin && usage.gemini
+                      && usage.remaining !== null && usage.remaining <= 0);
+  const usageBadge = (usage && !usage.admin && usage.gemini
+                      && usage.remaining !== null) ? (
+    limitHit
+      ? `Daily AI limit reached (${usage.used}/${usage.limit}) — resets at ${usage.resets_at}`
+      : `${usage.remaining} AI action${usage.remaining === 1 ? "" : "s"} remaining today`
+  ) : null;
 
   // "Next steps" digest: every FAILED check across all score groups,
   // derived straight from the existing pass/fail data (no backend changes).
@@ -204,16 +215,27 @@ export default function DiagnosisScreen({ parsed, scores, gemini, template,
           {busy ? "Scanning…" : "Scan Red Flags"}
         </button>
         {gemini && (
-          <button onClick={onRewrite} disabled={busy}
+          <button onClick={onRewrite} disabled={busy || limitHit}
+                  title={limitHit ? "Daily AI limit reached — resets tomorrow" : undefined}
                   className="btn bg-primary/15 text-primary border border-primary/40
-                             hover:bg-primary/25">
+                             hover:bg-primary/25 disabled:opacity-40 disabled:cursor-not-allowed">
             {busy ? "Rewriting…" : "✨ AI Rewrite Bullets"}
           </button>
         )}
-        <button onClick={onFix} disabled={busy} className="btn-primary">
+        <button onClick={onFix} disabled={busy || limitHit}
+                title={limitHit ? "Daily AI limit reached — resets tomorrow" : undefined}
+                className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
           {busy ? "Generating…"
             : (minorMode ? "Generate polished copy (optional) →" : "Fix My Resume →")}
         </button>
+        {usageBadge && (
+          <span className={"text-xs rounded-lg px-2.5 py-1.5 border " +
+            (limitHit
+              ? "text-danger bg-danger/10 border-danger/30"
+              : "text-mute bg-surface-2 border-line")}>
+            {limitHit ? `⛔ ${usageBadge}` : `⚡ ${usageBadge}`}
+          </span>
+        )}
         <label className="text-xs text-mute flex items-center gap-1.5">
           Template
           <select value={template} onChange={(e) => setTemplate(e.target.value)}

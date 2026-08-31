@@ -25,6 +25,15 @@ services:
       # Allow the deployed frontend's domain to call this API (CORS).
       - key: ALLOWED_ORIGINS
         value: https://resume-fixer-frontend.onrender.com
+      # Daily AI actions per browser (protects the Gemini quota).
+      - key: AI_DAILY_LIMIT
+        value: "3"
+      # Owner bypass: visit the site once as /?admin=<value> to store the
+      # token in that browser's localStorage - requests then send it as
+      # X-Admin-Token and skip the AI limit.  Rotate anytime here or in the
+      # Render dashboard.
+      - key: ADMIN_TOKEN
+        value: rf-admin-5KQ6tg5GVswCRvF8WWoa1bTi
 
   - type: web
     name: resume-fixer-frontend

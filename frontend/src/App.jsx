@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as api from "./api/client.js";
 import UploadZone from "./components/UploadZone.jsx";
 import DiagnosisScreen from "./components/DiagnosisScreen.jsx";
@@ -25,6 +25,13 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState("");
   const [err, setErr] = useState(null);
+  const [usage, setUsage] = useState(null);
+
+  // Daily AI-limit badge: fetch on load, refresh after any AI action.
+  const refreshUsage = () => {
+    api.getUsage().then(setUsage).catch(() => {});
+  };
+  useEffect(() => { refreshUsage(); }, []);
 
   const onUploaded = (res) => {
     setSession(res.session_id);
@@ -41,8 +48,9 @@ export default function App() {
     try {
       const r = await api.redflags(session);
       setRedFlags(r.flags); setEngine(r.engine);
+      if (r.notice) setErr(r.notice);
     } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    finally { setBusy(false); refreshUsage(); }
   };
 
   const runRewrite = async () => {
@@ -51,7 +59,7 @@ export default function App() {
       const r = await api.rewrite(session);
       setRewrittenCount(r.bullets_rewritten);
     } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    finally { setBusy(false); refreshUsage(); }
   };
 
   const runFix = async () => {
@@ -70,15 +78,17 @@ export default function App() {
       if (ob) setOrigUrl(URL.createObjectURL(ob));
       setStatus("diff");
     } catch (e) { setErr(e.message); setStatus("diagnosis"); }
-    finally { setBusy(false); }
+    finally { setBusy(false); refreshUsage(); }
   };
 
   const onJdSubmit = async (jdText) => {
     setBusy(true); setErr(null);
     try {
-      setJd(await api.jdmatch(session, jdText));
+      const r = await api.jdmatch(session, jdText);
+      setJd(r);
+      if (r && r.notice) setErr(r.notice);
     } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    finally { setBusy(false); refreshUsage(); }
   };
 
   const reset = () => {
@@ -124,6 +134,7 @@ export default function App() {
             onRedFlags={runRedFlags} onFix={runFix} onRewrite={runRewrite}
             rewrittenCount={rewrittenCount}
             fixAssessment={fixAssessment}
+            usage={usage}
           />
         )}
 

@@ -15,7 +15,7 @@ import tempfile
 # launched (e.g. `uvicorn main:app` from here vs `uvicorn backend.main:app`).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -25,6 +25,7 @@ import parser as resume_parser
 import scoring
 import session_store
 import template_engine
+import usage_limit
 
 app = FastAPI(title="Resume Fixer", version="1.0.0")
 
@@ -48,6 +49,41 @@ app.add_middleware(
 ALLOWED_EXT = {".pdf", ".docx"}
 TMP_DIR = os.path.join(tempfile.gettempdir(), "resume_fixer")
 os.makedirs(TMP_DIR, exist_ok=True)
+
+
+# ------------------------------------------------------- daily AI usage limit
+# Only the Gemini-consuming paths are metered: /rewrite, the Gemini path of
+# /redflags and /jdmatch, and /generate's AI bolding.  /upload and /score are
+# pure rules - free and unlimited for everyone.  Admins (X-Admin-Token header
+# matching the ADMIN_TOKEN env var) bypass the limit entirely.
+
+def _client_id(request: Request) -> str:
+    """Stable per-browser identity sent by the frontend (localStorage UUID)."""
+    cid = (request.headers.get("X-Client-Id") or "").strip()
+    return cid[:64] or ("ip:" + (request.client.host if request.client else "?"))
+
+
+def _is_admin(request: Request) -> bool:
+    return usage_limit.is_admin(request.headers.get("X-Admin-Token") or "")
+
+
+def _limit_msg(snap: dict) -> str:
+    return ("Daily AI limit reached (%d/%d) - resets at %s. Uploading, "
+            "scoring and rule-based fixes stay unlimited."
+            % (snap["used"], snap["limit"], snap["resets_at"]))
+
+
+def _meter_ai(request: Request) -> dict:
+    """Consume one AI action for this browser unless they're the admin.
+
+    Raises 429 when a non-admin has already used today's quota.  Returns the
+    usage snapshot (with admin=True short-circuit for the owner).
+    """
+    admin = _is_admin(request)
+    snap = usage_limit.consume(_client_id(request), admin)
+    if not snap["allowed"]:
+        raise HTTPException(429, _limit_msg(snap))
+    return snap
 
 # --- "minimal changes needed" thresholds (configurable) ----------------------
 # A resume scoring at/above BOTH score floors AND producing fewer than
@@ -201,7 +237,7 @@ def get_score(sid: str):
 # ---------------------------------------------------------------- 3. rewrite
 
 @app.post("/rewrite/{sid}")
-def rewrite(sid: str):
+def rewrite(sid: str, request: Request):
     s = _session_or_404(sid)
     # Deep-copy so rewritten bullets never mutate the stored original parse.
     structured = copy.deepcopy(s["parsed"].get("structured") or {})
@@ -212,6 +248,7 @@ def rewrite(sid: str):
             503, "Gemini API key not configured (set GEMINI_API_KEY). "
                  "Rule-based fixes are still available via /generate.")
 
+    _meter_ai(request)  # AI-powered action: counts toward the daily limit
     context = structured.get("headline", "")
     changed = 0
     for sec in structured.get("sections", []):
@@ -237,14 +274,31 @@ def rewrite(sid: str):
 # ---------------------------------------------------------------- 4. redflags
 
 @app.post("/redflags/{sid}")
-def redflags(sid: str):
+def redflags(sid: str, request: Request):
     s = _session_or_404(sid)
     cached = s.get("redflags")
     if cached is None:
         text = (resume_parser.structured_to_plain_text(s["parsed"]["structured"])
                 or s["parsed"].get("raw_text", ""))
-        cached = llm_service.detect_red_flags(text)
+        # The AI path is metered, but the rule-based fallback must keep
+        # working for everyone - so at the limit we degrade to rules
+        # (with a notice) instead of blocking the endpoint outright.
+        use_ai = llm_service.gemini_available()
+        notice = None
+        if use_ai:
+            snap = usage_limit.consume(_client_id(request), _is_admin(request))
+            if not snap["allowed"]:
+                use_ai = False
+                notice = ("Daily AI limit reached (%d/%d) - showing rule-based "
+                          "results; resets at %s."
+                          % (snap["used"], snap["limit"], snap["resets_at"]))
+        cached = (llm_service.detect_red_flags(text) if use_ai
+                  else llm_service.rule_based_red_flags(text))
         session_store.update(sid, redflags=cached)
+        out = {"flags": cached, "engine": "gemini" if use_ai else "rules"}
+        if notice:
+            out["notice"] = notice
+        return out
     return {"flags": cached,
             "engine": "gemini" if llm_service.gemini_available() else "rules"}
 
@@ -256,20 +310,41 @@ class JDRequest(BaseModel):
 
 
 @app.post("/jdmatch/{sid}")
-def jdmatch(sid: str, body: JDRequest):
+def jdmatch(sid: str, body: JDRequest, request: Request):
     s = _session_or_404(sid)
     if len(body.jd_text.strip()) < 50:
         raise HTTPException(400, "Job description too short - paste the full text.")
     text = (resume_parser.structured_to_plain_text(s["parsed"]["structured"])
             or s["parsed"].get("raw_text", ""))
-    return llm_service.match_jd(text, body.jd_text)
+    # Metered AI path with a rule-based fallback: at the limit we still give
+    # the user a (rules) match instead of blocking the endpoint.
+    use_ai = llm_service.gemini_available()
+    notice = None
+    if use_ai:
+        snap = usage_limit.consume(_client_id(request), _is_admin(request))
+        if not snap["allowed"]:
+            use_ai = False
+            notice = ("Daily AI limit reached (%d/%d) - showing rule-based "
+                      "results; resets at %s."
+                      % (snap["used"], snap["limit"], snap["resets_at"]))
+    result = (llm_service.match_jd(text, body.jd_text) if use_ai
+              else llm_service.rule_based_jd_match(text, body.jd_text))
+    if isinstance(result, dict):
+        result = {**result, "engine": "gemini" if use_ai else "rules"}
+        if notice:
+            result["notice"] = notice
+    return result
 
 
 # ---------------------------------------------------------------- 6. generate
 
 @app.post("/generate/{sid}")
-def generate(sid: str, template: str = "auto"):
+def generate(sid: str, request: Request, template: str = "auto"):
     s = _session_or_404(sid)
+    # /generate consumes Gemini only for AI bolding (and last-chance
+    # structuring); without a key it's pure rules and stays unlimited.
+    if llm_service.gemini_available():
+        _meter_ai(request)  # AI-powered action: counts toward the daily limit
     structured = s.get("structured_override") or s["parsed"].get("structured")
     if not structured or not structured.get("name"):
         # last-chance LLM structuring before giving up
@@ -340,6 +415,14 @@ def original(sid: str):
         raise HTTPException(404, "Original PDF preview unavailable for this file.")
     return FileResponse(path, media_type="application/pdf",
                         headers={"Content-Disposition": "inline"})
+
+
+@app.get("/usage")
+def usage(request: Request):
+    """Remaining daily AI actions for this browser (frontend badge)."""
+    snap = usage_limit.snapshot(_client_id(request), _is_admin(request))
+    snap["gemini"] = llm_service.gemini_available()
+    return snap
 
 
 @app.get("/health")
