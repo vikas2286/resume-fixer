@@ -304,13 +304,18 @@ _DOMAIN_KINDS = [
 
 
 def _clean_href(url: str) -> str:
-    """Strip tracking junk (utm_*) but keep a valid absolute href."""
+    """Strip tracking junk (utm_*), then guarantee an ABSOLUTE https URL.
+    Parsed contacts often arrive scheme-less ('linkedin.com/in/x' or
+    'www.github.com/y') - without the scheme PDF viewers treat the link
+    annotation as relative and clicking does nothing (Muskan bug)."""
     u = url.strip()
     if "utm_" in u:
         base, _, query = u.partition("?")
         kept = [p for p in query.split("&")
                 if p and not p.lower().startswith("utm_")]
         u = base + ("?" + "&".join(kept) if kept else "")
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", u):
+        u = "https://" + re.sub(r"^(?:www\d?\.)?", "", u, flags=re.I)
     return u
 
 
@@ -389,11 +394,29 @@ def _contact_items(contacts: list) -> list:
     return items
 
 
+def _linkify_urls(escaped: str) -> str:
+    """Turn URL-shaped tokens in ALREADY-ESCAPED text into real anchors
+    with friendly labels (LinkedIn/GitHub/...).  Runs on bullet/summary
+    text after metric bolding, when the only tags present are attribute-less
+    <strong> pairs - so it can never match inside an attribute.  Makes every
+    link in the document clickable, not just the contact-header ones."""
+    def _sub(m):
+        try:
+            href = _html.escape(_clean_href(m.group(0)), quote=True)
+        except Exception:  # noqa: BLE001 - never break rendering on a bad URL
+            return m.group(0)
+        label = _html.escape(_link_label(m.group(0)))
+        return '<a href="%s">%s</a>' % (href, label)
+    return URL_SEARCH_RE.sub(_sub, escaped)
+
+
 def _bold_metrics(text: str) -> Markup:
     """Escape bullet text, then bold standout metrics (40%, 7+, 300+, 12x)
-    so numbers draw the eye without bolding whole sentences."""
+    so numbers draw the eye without bolding whole sentences.  URL-shaped
+    tokens become clickable anchors (friendly label, absolute href)."""
     esc = _html.escape(text)
-    return Markup(_METRIC_RE.sub(r"<strong>\1\2</strong>", esc))
+    out = _METRIC_RE.sub(r"<strong>\1\2</strong>", esc)
+    return Markup(_linkify_urls(out))
 
 
 def _sanitize_bold_phrase(ph: str) -> str:
@@ -447,7 +470,9 @@ def _bold_summary(text: str) -> Markup:
         bolded += n
     if not bolded:
         return _bold_metrics(txt)
-    return Markup(out)
+    # Gemini path output has only attribute-less <strong> pairs, so it is
+    # safe to linkify URL tokens here too (same invariant as _bold_metrics).
+    return Markup(_linkify_urls(out))
 
 
 _STATUS_TAG_RE = re.compile(
