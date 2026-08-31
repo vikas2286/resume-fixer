@@ -62,7 +62,7 @@
         <div class="entry">
           <table class="trow"><tr>
             <td class="tl"><span class="entry-title">{{ e.title }}</span>{% if e.meta and e.bullets_html %} <span class="entry-meta">&mdash; {{ e.meta }}</span>{% endif %}</td>
-            <td class="tr">{% if e.link_href %}<a class="entry-link" href="{{ e.link_href }}">{{ e.link_label }}</a>{% endif %}{% if e.date %} <span class="entry-date">{{ e.date }}</span>{% endif %}{% if e.get('edu') and e.edu.score_display %} <span class="entry-date">{{ e.edu.score_display }}</span>{% endif %}</td>
+            <td class="tr">{% if e.link_href %}<a class="entry-link" href="{{ e.link_href }}">{{ e.link_label }}</a>{% endif %}{% if e.get('edu') and e.edu.score_display %} <span class="entry-date">{{ e.edu.score_display }}</span>{% endif %}{% if e.date %} <span class="entry-date">{{ e.date }}</span>{% endif %}</td>
           </tr></table>
           {% if e.meta and not e.bullets_html %}<div class="entry-meta">{{ e.meta }}</div>{% endif %}
           {% if e.bullets_html %}

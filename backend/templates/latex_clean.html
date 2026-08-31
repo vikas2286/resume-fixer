@@ -90,7 +90,7 @@
         <div class="entry">
           <table class="trow"><tr>
             <td class="tl"><span class="entry-title">{% if e.get('title_long') %}<span class="tlong">{{ e.title }}</span>{% else %}{{ e.title }}{% endif %}</span>{% if e.meta and e.bullets_html %} <span class="entry-meta">&mdash; {{ e.meta }}</span>{% endif %}</td>
-            <td class="tr">{% if e.get('status_tag') %}<span class="stag">{{ e.get('status_tag') }}</span> {% endif %}{% if e.link_href %}<a class="entry-link" href="{{ e.link_href }}">{{ e.link_label }}</a>{% endif %}{% if e.date %} <span class="entry-date">{{ e.date }}</span>{% endif %}{% if e.get('edu') and e.edu.score %} <span class="entry-date">{{ e.edu.score }}</span>{% endif %}{% if e.meta and not e.bullets_html and e.meta|length <= 24 %} <span class="entry-date">{{ e.meta }}</span>{% endif %}</td>
+            <td class="tr">{% if e.get('status_tag') %}<span class="stag">{{ e.get('status_tag') }}</span> {% endif %}{% if e.link_href %}<a class="entry-link" href="{{ e.link_href }}">{{ e.link_label }}</a>{% endif %}{% if e.get('edu') and e.edu.score %} <span class="entry-date">{{ e.edu.score }}</span>{% endif %}{% if e.meta and not e.bullets_html and e.meta|length <= 24 %} <span class="entry-date">{{ e.meta }}</span>{% endif %}{% if e.date %} <span class="entry-date">{{ e.date }}</span>{% endif %}</td>
           </tr></table>
           {% if e.get('ext_badge') %}<div class="extbadge">{{ e.get('ext_badge') }}</div>{% endif %}
           {% if e.meta and not e.bullets_html and e.meta|length > 24 %}<div class="entry-meta">{{ e.meta }}</div>{% endif %}
