@@ -7,13 +7,13 @@ import { useEffect, useState } from "react";
  */
 export function ringColor(score) {
   const s = Math.max(0, Math.min(100, Number(score) || 0));
-  if (s >= 75) return "#34d399";   // success
-  if (s >= 50) return "#fbbf24";   // warn
-  return "#f87171";                // danger
+  if (s >= 75) return "#3d7a5c";   // success — deep sage
+  if (s >= 50) return "#a87b1a";   // warn — dark gold
+  return "#b3372a";                // danger — brick red
 }
 
 export default function ScoreRing({
-  score, size = 180, stroke = 12, label = "Overall", track = "#1c2740",
+  score, size = 180, stroke = 12, label = "Overall", track = "#e6dcc7",
 }) {
   const pct = Math.max(0, Math.min(100, Number(score) || 0));
   const r = (size - stroke) / 2;
@@ -40,11 +40,10 @@ export default function ScoreRing({
                   strokeDasharray={c} strokeDashoffset={offset}
                   style={{
                     transition: "stroke-dashoffset 1s cubic-bezier(.22,.61,.36,1), stroke 0.4s",
-                    filter: `drop-shadow(0 0 6px ${color}66)`,
                   }} />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="font-extrabold tracking-tight"
+          <span className="font-display font-semibold tracking-tight"
                 style={{ fontSize: size * 0.30, color, lineHeight: 1 }}>
             {Math.round(pct)}
           </span>
@@ -64,6 +63,6 @@ export default function ScoreRing({
 export function MiniRing({ score, size = 72, stroke = 7, label }) {
   return (
     <ScoreRing score={score} size={size} stroke={stroke} label={label}
-               track="#1a2440" />
+               track="#e6dcc7" />
   );
 }

@@ -15,7 +15,7 @@ export default function JDMatchPanel({ result }) {
   if (!result) return null;
   const match = result.match_score;
   const color = match >= 70 ? "green" : match >= 40 ? "blue" : "red";
-  const barColor = match >= 70 ? "#34d399" : match >= 40 ? "#22d3ee" : "#f87171";
+  const barColor = match >= 70 ? "#3d7a5c" : match >= 40 ? "#b4530f" : "#b3372a";
   return (
     <div className="card p-5 pt-2 space-y-3 animate-fadeUp">
       <div className="flex items-center justify-between">
@@ -34,7 +34,7 @@ export default function JDMatchPanel({ result }) {
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-        <div className="bg-surface-2/70 border border-line rounded-xl p-3">
+        <div className="bg-surface-2/70 border border-line rounded-md p-3">
           <h4 className="font-medium text-success mb-2 text-xs uppercase
                          tracking-widest">
             Present in your resume
@@ -45,7 +45,7 @@ export default function JDMatchPanel({ result }) {
             </div>
           ) : <p className="text-faint text-xs">None of the key JD terms appear.</p>}
         </div>
-        <div className="bg-surface-2/70 border border-line rounded-xl p-3">
+        <div className="bg-surface-2/70 border border-line rounded-md p-3">
           <h4 className="font-medium text-danger mb-2 text-xs uppercase
                          tracking-widest">
             Missing — add these to land the role

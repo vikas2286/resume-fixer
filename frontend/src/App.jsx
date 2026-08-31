@@ -103,10 +103,10 @@ export default function App() {
       <header className="sticky top-0 z-10 bg-canvas/80 backdrop-blur border-b border-line">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl
-                             bg-gradient-to-br from-primary to-primary-dim
-                             text-canvas font-extrabold shadow-glow">R</span>
-            <h1 className="text-lg font-bold tracking-tight">Resume Fixer</h1>
+            <span className="flex h-8 w-8 items-center justify-center rounded-md
+                             bg-ink text-[#f6f1e7] font-display font-semibold
+                             shadow-glow">R</span>
+            <h1 className="text-lg font-semibold tracking-tight">Resume Fixer</h1>
           </div>
           {status === "diff" && (
             <button onClick={reset} className="btn-ghost text-xs">
@@ -152,10 +152,6 @@ export default function App() {
           />
         )}
       </main>
-
-      <footer className="text-center text-xs text-faint py-8">
-        Resume Fixer · rule-based scoring (no API key needed) · set GEMINI_API_KEY for AI rewrites
-      </footer>
     </div>
   );
 }

@@ -71,7 +71,7 @@ function NextSteps({ failed }) {
           {failed.map((c, i) => (
             <li key={c.check + i}
                 className="flex items-start gap-2.5 bg-surface-2/70 border border-line
-                           rounded-lg px-3 py-2 text-sm animate-fadeUp">
+                           rounded-md px-3 py-2 text-sm animate-fadeUp">
               <span className="text-warn shrink-0 mt-0.5">⚠</span>
               <span>
                 <span className="text-ink font-medium">{humanize(c.check)}</span>
@@ -173,7 +173,7 @@ export default function DiagnosisScreen({ parsed, scores, gemini, template,
           </p>
           <ul className="space-y-2">
             {suggestions.map((f, i) => (
-              <li key={i} className="bg-surface-2/70 border border-line rounded-lg p-3">
+              <li key={i} className="bg-surface-2/70 border border-line rounded-md p-3">
                 <span className="inline-block text-[10px] font-semibold uppercase
                                  tracking-wider px-1.5 py-0.5 rounded bg-warn/10
                                  text-warn border border-warn/30 mr-2">
@@ -239,7 +239,7 @@ export default function DiagnosisScreen({ parsed, scores, gemini, template,
         <label className="text-xs text-mute flex items-center gap-1.5">
           Template
           <select value={template} onChange={(e) => setTemplate(e.target.value)}
-                  className="bg-surface-2 border border-line rounded-lg px-2 py-1.5
+                  className="bg-surface-2 border border-line rounded-md px-2 py-1.5
                              text-xs text-ink focus:outline-none focus:border-primary/60">
             <option value="auto">Auto (recommended)</option>
             <option value="classic">Classic</option>

@@ -6,7 +6,7 @@ import { ringColor } from "./ScoreRing.jsx";
 function PillScore({ label, score }) {
   const color = ringColor(score);
   return (
-    <div className="flex-1 bg-surface-2/70 border border-line rounded-xl p-3 text-center">
+    <div className="flex-1 bg-surface-2/70 border border-line rounded-md p-3 text-center">
       <div className="text-[10px] uppercase tracking-widest text-faint">{label}</div>
       <div className="text-2xl font-bold" style={{ color }}>{score}</div>
     </div>
@@ -60,7 +60,7 @@ function JDTrigger({ onSubmit, busy, setBusy, setErr }) {
         <form onSubmit={go} className="flex gap-2 items-start">
           <textarea value={text} onChange={(e) => setText(e.target.value)}
             placeholder="Paste the job description here…"
-            className="w-72 h-24 bg-surface-2 border border-line rounded-xl p-2 text-sm
+            className="w-72 h-24 bg-surface-2 border border-line rounded-md p-2 text-sm
                        resize-y text-ink placeholder:text-faint
                        focus:outline-none focus:border-primary/60" />
           <div className="flex flex-col gap-1">

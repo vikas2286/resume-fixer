@@ -4,23 +4,27 @@
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
   body {
-    @apply bg-canvas text-ink antialiased;
+    @apply bg-canvas text-ink antialiased font-sans;
     font-feature-settings: "tnum" on, "lnum" on;
   }
-  /* dark scrollbars so nested panels don't flash white */
+  /* Editorial voice: headings in the display serif */
+  h1, h2 {
+    @apply font-display;
+  }
+  /* paper-toned scrollbars so nested panels don't flash */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #24314f #0b1120;
+    scrollbar-color: #d8ccb2 #f6f1e7;
   }
   *::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
   *::-webkit-scrollbar-thumb {
-    background: #24314f;
+    background: #d8ccb2;
     border-radius: 8px;
   }
   *::-webkit-scrollbar-track {
@@ -30,17 +34,19 @@
 
 @layer components {
   .card {
-    @apply bg-surface border border-line rounded-2xl shadow-card;
+    @apply bg-surface border border-line rounded-lg shadow-card;
   }
   .btn {
-    @apply px-4 py-2 rounded-xl text-sm font-medium transition
+    @apply px-4 py-2 rounded-md text-sm font-medium transition
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-primary text-canvas font-semibold hover:brightness-110 shadow-glow;
+    @apply btn bg-primary text-[#fdf8ef] font-semibold
+           hover:bg-primary-dim shadow-glow;
   }
   .btn-ghost {
-    @apply btn bg-surface-2 text-ink border border-line hover:border-primary/60;
+    @apply btn bg-surface-2 text-ink border border-line
+           hover:border-primary/60 hover:bg-surface;
   }
 }
 

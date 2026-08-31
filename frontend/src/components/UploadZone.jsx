@@ -49,7 +49,7 @@ export default function UploadZone({ onUpload, busy, setBusy, setErr }) {
       <input type="file" accept=".pdf,.docx,.doc" onChange={handleChange}
              className="hidden" id="file-input" />
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center
-                      rounded-2xl bg-primary/10 border border-primary/30
+                      rounded-md bg-primary/10 border border-primary/30
                       text-primary text-2xl">
         ↑
       </div>
