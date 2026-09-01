@@ -566,18 +566,15 @@ def _layout_signals(lines: list, n_pages: int) -> dict:
     header_lines = [l["text"] for l in top_lines if l.get("page", 0) == 0]
     running_headers = [l["text"] for l in top_lines if l.get("page", 0) > 0]
     footer_lines = [l["text"] for l in lines if l.get("y_bot_pct", 0) > 0.93]
-    hf_blob = "\n".join(header_lines + running_headers
-                        + footer_lines).lower()
+    # Contact in a header/footer that ATS tools skip = a real RUNNING header
+    # (top band of pages 2+) or a footer.  The page-1 contact block is the
+    # standard letterhead, never a "header": flagging it made EVERY multi-page
+    # rebuild fail the ATS contact_in_body check, because the old letterhead
+    # exemption was skipped whenever page 2 had any line in its top band -
+    # which is always true for a 2-page render (Gopal: ATS 95 -> 90 purely
+    # from this after "Fix My Resume" produced 2 pages).
+    hf_blob = "\n".join(running_headers + footer_lines).lower()
     contact_in_hf = bool(EMAIL_RE.search(hf_blob) or _find_phone(hf_blob))
-    # A contact line at the top of page 1 is the standard letterhead - only
-    # flag it when the contact ALSO appears in the body, on later pages
-    # (running headers) or in a footer; those are what ATS tools skip.
-    if contact_in_hf and not running_headers:
-        body_blob = "\n".join(l["text"] for l in lines
-                              if 0.07 <= l.get("y_top_pct", 1)
-                              <= 0.93).lower()
-        contact_in_hf = bool(EMAIL_RE.search(body_blob)
-                             or _find_phone(body_blob))
 
     return {
         "multicolumn": multicolumn,
