@@ -144,6 +144,37 @@ def _session_or_404(sid: str) -> dict:
     return s
 
 
+_SCAN_MSG = ("This PDF appears to be a scanned image with no selectable "
+             "text. Please upload a text-based PDF or a DOCX file instead.")
+
+
+def _no_text(parsed: dict) -> bool:
+    """True when the upload has (almost) no extractable text - i.e. a scan."""
+    return len(((parsed or {}).get("raw_text") or "").strip()) < 40
+
+
+def _structured_usable(st: object) -> bool:
+    """A structured resume is renderable only with REAL content: a non-empty
+    name AND at least one section that actually carries entries, skill items
+    or text.  An empty-but-truthy dict {'name':'', 'sections':[]} used to slip
+    past the old `if not structured` guard and render the template's
+    'Your Name' placeholder (blank-PDF bug, Sept 2026)."""
+    if not isinstance(st, dict):
+        return False
+    if not (st.get("name") or "").strip():
+        return False
+    for sec in st.get("sections") or []:
+        if not isinstance(sec, dict):
+            continue
+        if sec.get("type") == "entries" and (sec.get("entries") or []):
+            return True
+        if sec.get("type") == "skills" and (sec.get("items") or []):
+            return True
+        if (sec.get("text") or "").strip():
+            return True
+    return False
+
+
 def _public_parsed(parsed: dict) -> dict:
     """Trimmed parsed payload for the frontend (no heavy geometry data)."""
     return {
@@ -200,6 +231,10 @@ async def upload(file: UploadFile = File(...)):
 
     scores = scoring.score_resume(parsed)
     assessment = _assess_fix_mode(scores, parsed)
+    scanned = _no_text(parsed)
+    if scanned:
+        print("[upload] WARNING: no extractable text - scanned/image PDF?",
+              file=sys.stderr)
     sid = session_store.create({
         "filename": file.filename,
         "original_path": in_path,
@@ -217,6 +252,11 @@ async def upload(file: UploadFile = File(...)):
         "fix_mode": assessment["mode"],
         "fix_assessment": assessment,
         "gemini_enabled": llm_service.gemini_available(),
+        # Image-only/scanned PDF: no text layer for the parser to read.  The
+        # frontend shows a warning immediately instead of letting the user
+        # proceed to a diagnosis screen with nothing behind it (and /generate
+        # would 422 anyway - see the placeholder-PDF bug).
+        "is_scanned": scanned,
         **_layout_notice(parsed),
     }
 
@@ -230,6 +270,7 @@ def get_score(sid: str):
             "needs_major_fix": s.get("fix_assessment", {}).get("needs_major_fix", True),
             "fix_mode": s.get("fix_assessment", {}).get("mode", "full_fix"),
             "fix_assessment": s.get("fix_assessment"),
+            "is_scanned": _no_text(s["parsed"]),
             "parsed": _public_parsed(s["parsed"]),
             **_layout_notice(s["parsed"])}
 
@@ -241,8 +282,10 @@ def rewrite(sid: str, request: Request):
     s = _session_or_404(sid)
     # Deep-copy so rewritten bullets never mutate the stored original parse.
     structured = copy.deepcopy(s["parsed"].get("structured") or {})
-    if not structured:
-        raise HTTPException(422, "No structured content to rewrite.")
+    if not _structured_usable(structured):
+        raise HTTPException(
+            422, _SCAN_MSG if _no_text(s["parsed"])
+            else "No structured content to rewrite.")
     if not llm_service.gemini_available():
         raise HTTPException(
             503, "Gemini API key not configured (set GEMINI_API_KEY). "
@@ -346,17 +389,24 @@ def generate(sid: str, request: Request, template: str = "auto"):
     if llm_service.gemini_available():
         _meter_ai(request)  # AI-powered action: counts toward the daily limit
     structured = s.get("structured_override") or s["parsed"].get("structured")
-    if not structured or not structured.get("name"):
+    if not _structured_usable(structured):
         # last-chance LLM structuring before giving up
         try:
             raw = s["parsed"].get("raw_text", "")
-            llm_structured = llm_service.structure_resume(raw) if raw else None
+            llm_structured = (llm_service.structure_resume(raw)
+                              if raw.strip() else None)
         except Exception:  # noqa: BLE001
             llm_structured = None
-        if llm_structured:
+        if _structured_usable(llm_structured):
             structured = llm_structured
-    if not structured:
-        raise HTTPException(422, "Could not extract resume structure from this file.")
+    if not _structured_usable(structured):
+        # Content guard, not a truthiness guard: an empty-but-truthy
+        # structured dict used to slip past `if not structured` and render
+        # the template's "Your Name" placeholder as a "successful" blank
+        # PDF.  Never render a placeholder - fail with a clear reason.
+        raise HTTPException(422, _SCAN_MSG if _no_text(s["parsed"])
+                            else "Could not extract resume structure "
+                                 "from this file.")
 
     out_pdf = os.path.join(TMP_DIR, "%s_fixed.pdf" % sid)
     # A genuine 2+ page original is NEVER compressed onto one page:

@@ -422,8 +422,11 @@ def structure_resume(raw_text: str):
         "Return ONLY the JSON object.\n\nRESUME TEXT:\n%s" % raw_text[:8000]
     )
     data = _ask_json(prompt)
-    if isinstance(data, dict) and isinstance(data.get("sections"), list):
-        data.setdefault("name", "")
+    # Degenerate structures (empty sections or empty name) are rejected here
+    # so a half-baked Gemini answer can never render a placeholder resume -
+    # the caller falls back to the rule-based structured parse instead.
+    if (isinstance(data, dict) and isinstance(data.get("sections"), list)
+            and data["sections"] and (data.get("name") or "").strip()):
         data.setdefault("headline", "")
         data.setdefault("contacts", [])
         return data

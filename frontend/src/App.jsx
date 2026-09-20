@@ -34,6 +34,18 @@ export default function App() {
   useEffect(() => { refreshUsage(); }, []);
 
   const onUploaded = (res) => {
+    // Scanned/image-only PDF: no text layer, nothing to diagnose.  Stop here
+    // with a clear message instead of showing a diagnosis screen with
+    // nothing behind it (which used to end in a blank "Your Name" PDF).
+    if (res.is_scanned) {
+      setErr(
+        "This PDF looks like a scanned image with no selectable text, so we " +
+        "can't read its contents. Please upload a text-based PDF (or run OCR " +
+        "on it first) or a DOCX file instead."
+      );
+      setStatus("idle");
+      return;
+    }
     setSession(res.session_id);
     setParsed(res.parsed);
     setScores(res.scores);
