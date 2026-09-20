@@ -249,6 +249,9 @@ def _enum_items(tail: str):
     specs like '400/220' are not items).
     """
     tail = re.split(r"[\u2013\u2014]", tail)[0]
+    # Trailing temporal/scope clauses are not list items ('...including CTs
+    # and CVTs, during a 1-month internship' lists 2 components, not 3).
+    tail = re.split(r",?\s+\b(?:during|across|within|throughout)\b", tail)[0]
     return [i for i in re.split(r",|/|\band\b", tail)
             if i.strip() and re.search(r"[A-Za-z]", i)]
 
@@ -271,19 +274,78 @@ def _fix_enum_counts(new: str) -> str:
     return _ENUM_RE.sub(_fix, new)
 
 
-def _has_fabricated_number(new: str, bullet: str, context: str) -> bool:
+def _approx_counts_grounding(new: str, source: str):
+    """Enumerated item counts available as grounding for approximate numbers.
+
+    Aggressive mode may convert a vague scope word ('multiple', 'several')
+    into a number ONLY when that number is inferable from an enumerated
+    list in the rewrite itself or the surrounding source text.  Returns
+    the list of grounded item counts (empty = no grounding at all).
+    """
+    counts = []
+    for m in _ENUM_RE.finditer(new + " " + source):
+        c = len(_enum_items(m.group(2)))
+        if c:
+            counts.append(c)
+    return counts
+
+
+def _swap_weak_opener(bullet: str):
+    """Deterministic last-resort: replace a banned weak opener with a strong
+    verb.  Pure wording swap - the rest of the sentence is untouched, so no
+    fabrication risk - used only when a guarded rewrite could not be
+    produced and the ORIGINAL would otherwise keep a passive opener."""
+    for pat, verb in _WEAK_OPENER_SWAPS:
+        m = pat.match(bullet)
+        if m:
+            return verb + " " + bullet[m.end():].strip()
+    return None
+
+
+_WEAK_OPENER_SWAPS = [
+    (re.compile(r"^gained (?:hands-on |practical |direct |valuable )?exposure to", re.I),
+     "Investigated"),
+    (re.compile(r"^gained (?:practical |hands-on |valuable )?(?:insights?|understanding|knowledge) (?:into|of|about)", re.I),
+     "Analyzed"),
+    (re.compile(r"^learned about", re.I), "Examined"),
+    (re.compile(r"^observed and understood\b", re.I), "Assessed"),
+    (re.compile(r"^observed\b", re.I), "Monitored"),
+    (re.compile(r"^acquired (?:an?|comprehensive) (?:understanding|knowledge|grasp) of", re.I),
+     "Analyzed"),
+    (re.compile(r"^contributed to (?:the )?understanding of", re.I), "Examined"),
+    (re.compile(r"^contributed to", re.I), "Advanced"),
+    (re.compile(r"^was (?:involved|responsible) (?:in|for)", re.I), "Managed"),
+    (re.compile(r"^worked on", re.I), "Executed"),
+    (re.compile(r"^assisted (?:with|in)", re.I), "Supported"),
+    (re.compile(r"^helped (?:with|in|to)", re.I), "Supported"),
+]
+
+
+def _has_fabricated_number(new: str, bullet: str, context: str,
+                           aggressive: bool = False) -> bool:
     """True when the rewrite contains a number with no legitimate source.
 
-    Allowed: numbers present in the bullet or context, counts verified
-    against their own enumeration (post-_fix_enum_counts), and durations
-    ('4-week internship') derived from the entry's date range.
+    STRICT (default) mode: allowed numbers are those present in the bullet
+    or context, counts verified against their own enumeration (post
+    _fix_enum_counts), and durations ('4-week internship') derived from the
+    entry's date range.
+
+    AGGRESSIVE mode additionally allows APPROXIMATE counts (2..max) grounded
+    in an enumerated list in the bullet/context/rewrite - 'multiple devices'
+    may become '5 devices' when 5 items are enumerated nearby, and '3+' of a
+    7-item list is fine.  The ABSOLUTE line holds in every mode: a number
+    attached to a percentage, a currency amount, or any outcome metric with
+    no source basis is always rejected, and a number with zero grounding
+    (no enumeration anywhere) is always rejected.
     """
     allowed = set(_NUM_RE.findall(bullet)) | set(_NUM_RE.findall(context or ""))
+    source = bullet + " " + (context or "")
     enum_ok = set()
     for m in _ENUM_RE.finditer(new):
         items = _enum_items(m.group(2))
         if items:
             enum_ok.add(m.group(1))
+    grounding = None  # computed lazily, only in aggressive mode
     for m in _NUM_RE.finditer(new):
         n = m.group(0)
         if n in allowed or n in enum_ok:
@@ -291,11 +353,23 @@ def _has_fabricated_number(new: str, bullet: str, context: str) -> bool:
         seg = new[max(0, m.start() - 2):m.end() + 10]
         if _DURATION_RE.search(seg):        # '4-week internship' etc.
             continue
-        return True                          # invented
+        if aggressive:
+            # ABSOLUTE fabrication line - %, currency, or any number glued
+            # to an outcome claim is rejected even in aggressive mode.
+            if ("%" in seg or re.search(r"[$\u20b9\u20ac\u00a3]|rs\.?", seg, re.I)
+                    or re.search(r"\b(improv\w*|increas\w*|reduc\w*|sav\w*|"
+                                 r"boost\w*|grow\w*)\b.{0,15}$", seg, re.I)):
+                return True
+            if grounding is None:
+                grounding = _approx_counts_grounding(new, source)
+            if grounding and 2 <= int(float(n)) <= max(grounding):
+                continue                    # grounded approximation
+            return True                     # zero grounding = pure invention
+        return True                          # strict: strict rules apply
     return False                             #
 
 
-def rewrite_bullet(bullet: str, context: str = ""):
+def rewrite_bullet(bullet: str, context: str = "", aggressive: bool = False):
     """Return a stronger version of one resume bullet, or None on failure."""
     prompt = (
         "Rewrite this resume bullet point to be professional, active-voice, and "
@@ -323,7 +397,7 @@ def rewrite_bullet(bullet: str, context: str = ""):
     if not out:
         return None
     fixed = _fix_enum_counts(out.strip().strip('"'))
-    if _has_fabricated_number(fixed, bullet, context):
+    if _has_fabricated_number(fixed, bullet, context, aggressive=aggressive):
         # Unsafe rewrite: one strict retry (no new numbers) before keeping
         # the original - a plain fallback would preserve a weak opener.
         retry = _ask(
@@ -335,17 +409,21 @@ def rewrite_bullet(bullet: str, context: str = ""):
             + "Bullet: %s" % bullet)
         if retry:
             r2 = _fix_enum_counts(retry.strip().strip('"'))
-            if not _has_fabricated_number(r2, bullet, context):
+            if not _has_fabricated_number(r2, bullet, context,
+                                          aggressive=aggressive):
                 return r2
         return None  # keep the original: it can only be accurate
     return fixed
 
 
-def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
+def rewrite_bullets(bullets: list, context: str = "", used_verbs=None,
+                    aggressive: bool = False):
     """Rewrite many bullets; returns list aligned with input (None per failure).
 
     used_verbs: opening verbs already used by OTHER entries of the same resume,
     so verb variation is enforced document-wide, not just within one call.
+    aggressive: opt-in relaxed quantification - approximate counts grounded
+    in enumerated lists are allowed; pure invention is still rejected.
     """
     if not bullets:
         return []
@@ -411,6 +489,22 @@ def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
         "5. Keep each rewrite under 30 words and faithful to the original facts.\n"
         'Return ONLY a JSON object: {"rewrites": {"1": "...", "2": "..."}}\n\n'
     )
+    if aggressive:
+        rules += (
+            "6. AGGRESSIVE QUANTIFICATION MODE (user explicitly opted in): you may "
+            "convert vague scope words ('multiple', 'several', 'various', "
+            "'various types of') into a specific count ONLY when that count is "
+            "directly inferable from an enumerated list in the bullet or Context "
+            "('studied multiple protection devices' + 5 devices listed -> '5 "
+            "protection devices'; or '3+' of a 7-item list). You may also frame "
+            "durations/scale slightly more freely ('a multi-week internship', "
+            "'close to a month'). STILL ABSOLUTELY FORBIDDEN even in this mode: "
+            "percentages, money amounts, or outcome metrics with no basis in the "
+            "source ('improved efficiency by 20%'), and ANY number with zero "
+            "grounding - if no enumeration or figure exists anywhere, do not "
+            "invent one. These are educated estimates: never present them as "
+            "verified facts.\n"
+        )
 
     def _build(bs, strict=False, extra=""):
         return (rules
@@ -437,7 +531,7 @@ def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
         if r:
             r = str(r).strip()
             r = _fix_enum_counts(r)
-            if _has_fabricated_number(r, b, context):
+            if _has_fabricated_number(r, b, context, aggressive=aggressive):
                 r = None  # unsafe rewrite - retried strictly below
         out.append(r or None)
         if r is None:
@@ -454,7 +548,8 @@ def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
                 if r:
                     r = str(r).strip()
                     r = _fix_enum_counts(r)
-                    if not _has_fabricated_number(r, bullets[i], context):
+                    if not _has_fabricated_number(r, bullets[i], context,
+                                                  aggressive=aggressive):
                         out[i] = r
     # Enforce the two-max opener cap deterministically: the count signal
     # constrains verbs used by EARLIER entries, but a single batch can still
@@ -488,7 +583,8 @@ def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
                     if r:
                         r = str(r).strip()
                         r = _fix_enum_counts(r)
-                        if (not _has_fabricated_number(r, bullets[i], context)
+                        if (not _has_fabricated_number(r, bullets[i], context,
+                                                       aggressive=aggressive)
                                 and _opener(r) not in over):
                             out[i] = r
     return out

@@ -278,7 +278,7 @@ def get_score(sid: str):
 # ---------------------------------------------------------------- 3. rewrite
 
 @app.post("/rewrite/{sid}")
-def rewrite(sid: str, request: Request):
+def rewrite(sid: str, request: Request, aggressive: bool = False):
     s = _session_or_404(sid)
     # Deep-copy so rewritten bullets never mutate the stored original parse.
     structured = copy.deepcopy(s["parsed"].get("structured") or {})
@@ -312,7 +312,8 @@ def rewrite(sid: str, request: Request):
                 headline, summary_text, entry.get("title", ""),
                 entry.get("meta", ""), entry.get("date", "")) if x)
             rewrites = llm_service.rewrite_bullets(
-                bullets, entry_ctx, used_verbs=used_verbs or None)
+                bullets, entry_ctx, used_verbs=used_verbs or None,
+                aggressive=aggressive)
             new_bullets = []
             for orig, rw in zip(entry["bullets"], rewrites):
                 if rw and rw != orig:

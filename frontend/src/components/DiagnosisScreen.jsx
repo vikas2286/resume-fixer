@@ -113,6 +113,7 @@ function Evidence({ parsed }) {
 export default function DiagnosisScreen({ parsed, scores, gemini, template,
                                           setTemplate, busy, onRedFlags,
                                           onFix, onRewrite, rewrittenCount,
+                                          aggressive, setAggressive,
                                           fixAssessment, usage }) {
   if (!scores) return null;
   const minorMode = fixAssessment && !fixAssessment.needs_major_fix;
@@ -214,6 +215,18 @@ export default function DiagnosisScreen({ parsed, scores, gemini, template,
         <button onClick={onRedFlags} disabled={busy} className="btn-ghost">
           {busy ? "Scanning…" : "Scan Red Flags"}
         </button>
+        {gemini && (
+          <label
+            title="Adds estimated numbers based on context (e.g. 'multiple' becomes '3+') where the exact figure isn't stated. Review carefully before using — these are educated estimates, not verified facts."
+            className="flex items-center gap-1.5 text-xs text-mute cursor-pointer
+                       select-none bg-surface-2 border border-line rounded-lg
+                       px-2.5 py-1.5 hover:border-primary/40">
+            <input type="checkbox" checked={aggressive}
+                   onChange={(e) => setAggressive(e.target.checked)}
+                   className="accent-primary cursor-pointer" />
+            Aggressive quantification (may infer approximate numbers)
+          </label>
+        )}
         {gemini && (
           <button onClick={onRewrite} disabled={busy || limitHit}
                   title={limitHit ? "Daily AI limit reached — resets tomorrow" : undefined}

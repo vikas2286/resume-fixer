@@ -18,6 +18,7 @@ export default function App() {
   const [origUrl, setOrigUrl] = useState(null);
     const [redFlags, setRedFlags] = useState(null);
   const [rewrittenCount, setRewrittenCount] = useState(null);
+  const [aggressive, setAggressive] = useState(false); // resets every upload
   const [engine, setEngine] = useState("rules");
   const [jd, setJd] = useState(null);
   const [template, setTemplate] = useState("auto");
@@ -52,6 +53,7 @@ export default function App() {
     setBeforeScore(res.scores);
     setGemini(res.gemini_enabled);
     setFixAssessment(res.fix_assessment || null);
+    setAggressive(false); // never persist aggressive mode across resumes
     setStatus("diagnosis");
   };
 
@@ -68,7 +70,7 @@ export default function App() {
   const runRewrite = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await api.rewrite(session);
+      const r = await api.rewrite(session, aggressive);
       setRewrittenCount(r.bullets_rewritten);
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); refreshUsage(); }
@@ -144,7 +146,8 @@ export default function App() {
             parsed={parsed} scores={scores} gemini={gemini} template={template}
             setTemplate={setTemplate} busy={busy} busyLabel={busyLabel}
             onRedFlags={runRedFlags} onFix={runFix} onRewrite={runRewrite}
-            rewrittenCount={rewrittenCount}
+            rewrittenCount={rewrittenCount} aggressive={aggressive}
+            setAggressive={setAggressive}
             fixAssessment={fixAssessment}
             usage={usage}
           />

@@ -92,8 +92,9 @@ export async function redflags(sid) {
   }))).json();
 }
 
-export async function rewrite(sid) {
-  return (await handle(await fetch(`${API}/rewrite/${sid}`, {
+export async function rewrite(sid, aggressive = false) {
+  const q = aggressive ? "?aggressive=true" : "";
+  return (await handle(await fetch(`${API}/rewrite/${sid}${q}`, {
     method: "POST", headers: authHeaders(),
   }))).json();
 }
