@@ -223,30 +223,146 @@ def summary_key_phrases(text: str):
 
 
 # ---------------------------------------------------------------- rewrite
+#
+# Deterministic safety net for AI rewrites: the prompt forbids fabricated
+# numbers, but LLMs still slip (a "6" for a 7-item list, "3+ blogs weekly"
+# for a bullet that just says 'reading tech blogs').  These helpers catch
+# the mechanical cases so a rewritten bullet can never contain a number
+# that isn't in the source, countable from its own enumeration, or a
+# duration derived from the entry's date range.
+
+_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+_DURATION_RE = re.compile(
+    r"\b\d+(?:\.\d+)?[\s\-]{0,3}(?:week|month|day|year)s?\b", re.I)
+_ENUM_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s+[^.;]{0,60}?"
+    r"(?:including|such as|like|supporting|covering|comprising|featuring|:)"
+    r"\s+([^.;;]+)", re.I)
+
+
+def _fix_enum_counts(new: str) -> str:
+    """'6 components including A, B, C' with 3 items -> count corrected.
+
+    A rewrite may attach a count to an enumeration; the count must match
+    the number of items actually listed (or exceed it only as 'N+').  When
+    the model miscounts, repair it from its own list.
+    """
+    def _fix(m):
+        n = float(m.group(1))
+        items = [i for i in re.split(r",|/|\band\b", m.group(2)) if i.strip()]
+        if not items or n == len(items):
+            return m.group(0)
+        if len(items) == 1:
+            return re.sub(_NUM_RE, "one", m.group(0), count=1)
+        return re.sub(_NUM_RE, str(len(items)), m.group(0), count=1)
+    return _ENUM_RE.sub(_fix, new)
+
+
+def _has_fabricated_number(new: str, bullet: str, context: str) -> bool:
+    """True when the rewrite contains a number with no legitimate source.
+
+    Allowed: numbers present in the bullet or context, counts verified
+    against their own enumeration (post-_fix_enum_counts), and durations
+    ('4-week internship') derived from the entry's date range.
+    """
+    allowed = set(_NUM_RE.findall(bullet)) | set(_NUM_RE.findall(context or ""))
+    enum_ok = set()
+    for m in _ENUM_RE.finditer(new):
+        items = [i for i in re.split(r",|/|\band\b", m.group(2)) if i.strip()]
+        if items:
+            enum_ok.add(m.group(1))
+    for m in _NUM_RE.finditer(new):
+        n = m.group(0)
+        if n in allowed or n in enum_ok:
+            continue
+        seg = new[max(0, m.start() - 2):m.end() + 10]
+        if _DURATION_RE.search(seg):        # '4-week internship' etc.
+            continue
+        return True                          # invented
+    return False                             #
+
 
 def rewrite_bullet(bullet: str, context: str = ""):
     """Return a stronger version of one resume bullet, or None on failure."""
     prompt = (
         "Rewrite this resume bullet point to be professional, active-voice, and "
-        "impact-driven. Start with a strong action verb, keep it under 30 words, "
-        "do NOT invent facts or numbers. Reply with ONLY the rewritten bullet.\n\n"
+        "impact-driven. Start with a strong, accurate action verb, keep it under "
+        "30 words. Rules:\n"
+        "- QUANTIFY FROM SOURCE: if the bullet or the Context contains any "
+        "quantifiable detail (ratings, counts, durations, specs), work it in - "
+        "counting items the bullet itself lists is allowed ('Studied 6 major "
+        "substation components: CTs, CVTs, breakers...').\n"
+        "- NEVER invent numbers, percentages, or outcomes that are not present in "
+        "the bullet or Context and not directly countable from them. If nothing "
+        "is quantifiable, strengthen specificity instead (what exactly, in what "
+        "context, toward what purpose) - never a vague noun list.\n"
+        "Reply with ONLY the rewritten bullet.\n\n"
         + ("Context: %s\n" % context if context else "")
         + "Bullet: %s" % bullet
     )
     out = _ask(prompt)
-    return out.strip('"') if out else None
+    if not out:
+        return None
+    fixed = _fix_enum_counts(out.strip().strip('"'))
+    if _has_fabricated_number(fixed, bullet, context):
+        return None  # keep the original: it can only be accurate
+    return fixed
 
 
-def rewrite_bullets(bullets: list, context: str = ""):
-    """Rewrite many bullets; returns list aligned with input (None per failure)."""
+def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
+    """Rewrite many bullets; returns list aligned with input (None per failure).
+
+    used_verbs: opening verbs already used by OTHER entries of the same resume,
+    so verb variation is enforced document-wide, not just within one call.
+    """
     if not bullets:
         return []
+    verb_line = ""
+    if used_verbs:
+        verb_line = (
+            "Opening verbs already used elsewhere in this resume - do NOT start "
+            "any bullet with these (one repeat at most): %s\n"
+            % ", ".join(sorted(used_verbs)))
     prompt = (
         "You are an expert resume writer. Rewrite EACH numbered resume bullet to "
-        "be professional, active-voice, and impact-driven (strong verb first, "
-        "under 30 words). Do not invent facts.\n"
+        "be professional, active-voice, and impact-driven. Rules:\n"
+        "1. QUANTIFY FROM SOURCE: look for ANY quantifiable detail already present "
+        "in the bullet or the Context - voltage/power ratings, equipment or "
+        "component counts, project/internship duration, number of systems, teams "
+        "or people, frequency, scale of operation, stated technical specs - and "
+        "work it into the bullet. Even observational/exposure-based work can be "
+        "scaled: 'Studied 6 major substation components (CTs, CVTs, circuit "
+        "breakers...) at a 400/220 kV facility' beats a bare noun list. Counting "
+        "items the bullet itself lists, or citing specs stated in the Context, is "
+        "allowed and encouraged - but count EXACTLY: if you enumerate items, the "
+        "number must match the actual count (list 7 items -> say 7, or '7+').\n"
+        "2. NEVER FABRICATE: do not invent numbers, percentages, or outcomes that "
+        "are not in the bullet or Context and are not directly countable from "
+        "them (never add 'improved efficiency by 20%', 'saved 10 hours'). Never "
+        "attach a number to a habit or generic activity that has no stated "
+        "count ('reading tech blogs' must NOT become '3+ technical blogs "
+        "weekly'). If a bullet has no quantifiable detail and none exists in "
+        "the Context, strengthen SPECIFICITY and COMPLETENESS instead: state "
+        "exactly what was "
+        "done or observed, in what context, and toward what purpose - a "
+        "complete statement, never a vague list of nouns. PRESERVE every number "
+        "already present in the original bullet (ratings, counts, percentages) "
+        "unless it is factually wrong in the Context - do not drop or round "
+        "stated figures.\n"
+        "3. VARY VERBS: start each bullet with a strong, accurate action verb. "
+        "Across ALL bullets below, do not start more than TWO with the same "
+        "opening verb. 'Analyzed', 'Examined' and 'Worked' are overused defaults "
+        "- prefer precise verbs matched to what actually happened (studied, "
+        "evaluated, assessed, investigated, inspected, monitored, documented, "
+        "tested, configured, troubleshot, supported, contributed to, "
+        "coordinated, commissioned). Never upgrade observation into ownership: "
+        "an intern who observed relay panels 'inspected' or 'studied' them, they "
+        "did not 'design' or 'lead' them.\n"
+        "4. Keep each rewrite under 30 words and faithful to the original facts.\n"
         'Return ONLY a JSON object: {"rewrites": {"1": "...", "2": "..."}}\n\n'
-        + ("Context: %s\n" % context if context else "")
+        + ("Context (may contain quantifiable details worth surfacing): %s\n"
+           % context if context else "")
+        + verb_line
         + "\n".join("%d. %s" % (i + 1, b) for i, b in enumerate(bullets))
     )
     data = _ask_json(prompt)
@@ -256,7 +372,12 @@ def rewrite_bullets(bullets: list, context: str = ""):
     out = []
     for i, b in enumerate(bullets):
         r = mapping.get(str(i + 1)) or mapping.get(i + 1)
-        out.append(str(r).strip() if r else None)
+        if r:
+            r = str(r).strip()
+            r = _fix_enum_counts(r)
+            if _has_fabricated_number(r, b, context):
+                r = None  # keep the original: it can only be accurate
+        out.append(r or None)
     return out
 
 

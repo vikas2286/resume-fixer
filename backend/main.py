@@ -292,7 +292,14 @@ def rewrite(sid: str, request: Request):
                  "Rule-based fixes are still available via /generate.")
 
     _meter_ai(request)  # AI-powered action: counts toward the daily limit
-    context = structured.get("headline", "")
+    # Rich per-entry context: the rewrite model can only surface quantifiable
+    # details (voltages, durations, counts) if it actually SEES them, and can
+    # only vary verbs document-wide if it knows which verbs are already used.
+    headline = structured.get("headline", "")
+    summary_text = " ".join(
+        (sec.get("text") or "") for sec in structured.get("sections", [])
+        if sec.get("type") == "paragraph")[:400]
+    used_verbs = set()
     changed = 0
     for sec in structured.get("sections", []):
         if sec.get("type") != "entries":
@@ -301,7 +308,11 @@ def rewrite(sid: str, request: Request):
             bullets = [b for b in entry.get("bullets", []) if b]
             if not bullets:
                 continue
-            rewrites = llm_service.rewrite_bullets(bullets, context)
+            entry_ctx = " | ".join(x for x in (
+                headline, summary_text, entry.get("title", ""),
+                entry.get("meta", ""), entry.get("date", "")) if x)
+            rewrites = llm_service.rewrite_bullets(
+                bullets, entry_ctx, used_verbs=used_verbs or None)
             new_bullets = []
             for orig, rw in zip(entry["bullets"], rewrites):
                 if rw and rw != orig:
@@ -310,6 +321,12 @@ def rewrite(sid: str, request: Request):
                 else:
                     new_bullets.append(orig)
             entry["bullets"] = new_bullets
+            # Track the opening verbs that will REMAIN in the resume so later
+            # entries avoid them (document-wide variation).
+            for b in new_bullets:
+                w = b.split(None, 1)
+                if w:
+                    used_verbs.add(w[0].strip(",.:-;").lower())
     session_store.update(sid, structured_override=structured, rewritten=True)
     return {"ok": True, "bullets_rewritten": changed}
 

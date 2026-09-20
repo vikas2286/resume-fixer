@@ -23,7 +23,8 @@ import main  # noqa: E402
 
 # --- stub the LLM layer (no network) -----------------------------------------
 llm_service.gemini_available = lambda: True
-llm_service.rewrite_bullets = lambda bullets, context="": list(bullets)
+llm_service.rewrite_bullets = (
+    lambda bullets, context="", used_verbs=None: list(bullets))
 llm_service.detect_red_flags = lambda text: [{"type": "stub", "quote": "q"}]
 llm_service.match_jd = lambda text, jd: {"score": 50}
 llm_service.summary_key_phrases = lambda text: []
