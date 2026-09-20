@@ -240,6 +240,19 @@ _ENUM_RE = re.compile(
     r"\s+([^.;;]+)", re.I)
 
 
+def _enum_items(tail: str):
+    """List items inside an enumeration tail (post-trigger text).
+
+    Drops any trailing clause introduced by an em/en dash ('...Busbars—at
+    the 400/220 kV facility' - the location is not a list item) and any
+    fragment that carries no letters (pure number fragments from slashed
+    specs like '400/220' are not items).
+    """
+    tail = re.split(r"[\u2013\u2014]", tail)[0]
+    return [i for i in re.split(r",|/|\band\b", tail)
+            if i.strip() and re.search(r"[A-Za-z]", i)]
+
+
 def _fix_enum_counts(new: str) -> str:
     """'6 components including A, B, C' with 3 items -> count corrected.
 
@@ -249,7 +262,7 @@ def _fix_enum_counts(new: str) -> str:
     """
     def _fix(m):
         n = float(m.group(1))
-        items = [i for i in re.split(r",|/|\band\b", m.group(2)) if i.strip()]
+        items = _enum_items(m.group(2))
         if not items or n == len(items):
             return m.group(0)
         if len(items) == 1:
@@ -268,7 +281,7 @@ def _has_fabricated_number(new: str, bullet: str, context: str) -> bool:
     allowed = set(_NUM_RE.findall(bullet)) | set(_NUM_RE.findall(context or ""))
     enum_ok = set()
     for m in _ENUM_RE.finditer(new):
-        items = [i for i in re.split(r",|/|\band\b", m.group(2)) if i.strip()]
+        items = _enum_items(m.group(2))
         if items:
             enum_ok.add(m.group(1))
     for m in _NUM_RE.finditer(new):
@@ -296,6 +309,12 @@ def rewrite_bullet(bullet: str, context: str = ""):
         "the bullet or Context and not directly countable from them. If nothing "
         "is quantifiable, strengthen specificity instead (what exactly, in what "
         "context, toward what purpose) - never a vague noun list.\n"
+        "- STRONG VERBS: start with a verb implying action with judgment "
+        "(inspected, evaluated, assessed, investigated, documented, analyzed, "
+        "diagnosed, audited, tested). NEVER start with passive openers like "
+        "'Observed', 'Gained exposure to', 'Acquired an understanding of', "
+        "'Contributed to understanding', 'Learned about', 'Was involved in', "
+        "'Worked on' - even when quantified.\n"
         "Reply with ONLY the rewritten bullet.\n\n"
         + ("Context: %s\n" % context if context else "")
         + "Bullet: %s" % bullet
@@ -305,6 +324,19 @@ def rewrite_bullet(bullet: str, context: str = ""):
         return None
     fixed = _fix_enum_counts(out.strip().strip('"'))
     if _has_fabricated_number(fixed, bullet, context):
+        # Unsafe rewrite: one strict retry (no new numbers) before keeping
+        # the original - a plain fallback would preserve a weak opener.
+        retry = _ask(
+            "You are an expert resume writer. Rewrite this resume bullet to be "
+            "professional and active-voice. STRICT: do NOT introduce ANY number "
+            "that is not already in the bullet or Context - no counts, no "
+            "durations. Strengthen the wording only.\n\n"
+            + ("Context: %s\n" % context if context else "")
+            + "Bullet: %s" % bullet)
+        if retry:
+            r2 = _fix_enum_counts(retry.strip().strip('"'))
+            if not _has_fabricated_number(r2, bullet, context):
+                return r2
         return None  # keep the original: it can only be accurate
     return fixed
 
@@ -319,11 +351,20 @@ def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
         return []
     verb_line = ""
     if used_verbs:
-        verb_line = (
-            "Opening verbs already used elsewhere in this resume - do NOT start "
-            "any bullet with these (one repeat at most): %s\n"
-            % ", ".join(sorted(used_verbs)))
-    prompt = (
+        if isinstance(used_verbs, dict):
+            verb_line = (
+                "Opening verbs already used elsewhere in this resume: %s. A verb "
+                "used TWICE already is BANNED - do not start any bullet with it. "
+                "A verb used once may appear at most once more. Prefer strong "
+                "verbs not listed at all.\n"
+                % ", ".join("%s (x%d)" % (v, c)
+                            for v, c in sorted(used_verbs.items())))
+        else:  # legacy set
+            verb_line = (
+                "Opening verbs already used elsewhere in this resume - do NOT start "
+                "any bullet with these (one repeat at most): %s\n"
+                % ", ".join(sorted(used_verbs)))
+    rules = (
         "You are an expert resume writer. Rewrite EACH numbered resume bullet to "
         "be professional, active-voice, and impact-driven. Rules:\n"
         "1. QUANTIFY FROM SOURCE: look for ANY quantifiable detail already present "
@@ -335,7 +376,9 @@ def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
         "breakers...) at a 400/220 kV facility' beats a bare noun list. Counting "
         "items the bullet itself lists, or citing specs stated in the Context, is "
         "allowed and encouraged - but count EXACTLY: if you enumerate items, the "
-        "number must match the actual count (list 7 items -> say 7, or '7+').\n"
+        "number must match the actual count (list 7 items -> say 7, or '7+'). "
+        "When mentioning a duration, phrase it naturally ('during a 1-month "
+        "internship') - never paste a raw date range into the sentence.\n"
         "2. NEVER FABRICATE: do not invent numbers, percentages, or outcomes that "
         "are not in the bullet or Context and are not directly countable from "
         "them (never add 'improved efficiency by 20%', 'saved 10 hours'). Never "
@@ -349,35 +392,105 @@ def rewrite_bullets(bullets: list, context: str = "", used_verbs=None):
         "already present in the original bullet (ratings, counts, percentages) "
         "unless it is factually wrong in the Context - do not drop or round "
         "stated figures.\n"
-        "3. VARY VERBS: start each bullet with a strong, accurate action verb. "
-        "Across ALL bullets below, do not start more than TWO with the same "
-        "opening verb. 'Analyzed', 'Examined' and 'Worked' are overused defaults "
-        "- prefer precise verbs matched to what actually happened (studied, "
-        "evaluated, assessed, investigated, inspected, monitored, documented, "
-        "tested, configured, troubleshot, supported, contributed to, "
-        "coordinated, commissioned). Never upgrade observation into ownership: "
-        "an intern who observed relay panels 'inspected' or 'studied' them, they "
-        "did not 'design' or 'lead' them.\n"
-        "4. Keep each rewrite under 30 words and faithful to the original facts.\n"
+        "3. STRONG VERBS ONLY: the opening verb must imply ACTION WITH JUDGMENT - "
+        "the person DID something, not just watched. NEVER start a bullet with "
+        "these weak/passive openers, even with a number attached: 'Observed', "
+        "'Gained exposure to' / 'Gained practical exposure', 'Acquired an "
+        "understanding of' / 'Acquired comprehensive knowledge of', 'Contributed "
+        "to understanding', 'Learned about', 'Was involved in', 'Was responsible "
+        "for', 'Worked on', 'Assisted with', 'Helped with'. For "
+        "observational/exposure work use verbs that show engagement: inspected, "
+        "evaluated, assessed, investigated, documented, analyzed, diagnosed, "
+        "audited, examined, tested. Stay truthful - an intern who watched relay "
+        "panels 'inspected' or 'audited' them, they did not 'design' or 'lead' "
+        "them.\n"
+        "4. VARY VERBS: within those strong verbs, do not start more than TWO "
+        "bullets with the same opening verb. 'Analyzed', 'Examined' and "
+        "'Inspected' are tempting defaults - spread across the whole strong bank "
+        "so 8 bullets get 8 different openers.\n"
+        "5. Keep each rewrite under 30 words and faithful to the original facts.\n"
         'Return ONLY a JSON object: {"rewrites": {"1": "...", "2": "..."}}\n\n'
-        + ("Context (may contain quantifiable details worth surfacing): %s\n"
-           % context if context else "")
-        + verb_line
-        + "\n".join("%d. %s" % (i + 1, b) for i, b in enumerate(bullets))
     )
-    data = _ask_json(prompt)
+
+    def _build(bs, strict=False, extra=""):
+        return (rules
+                + ("STRICT: do NOT introduce ANY number that is not already in "
+                   "the bullet or Context - no counts, no durations. Strengthen "
+                   "the wording only.\n" if strict else "")
+                + extra
+                + ("Context (may contain quantifiable details worth surfacing): "
+                   "%s\n" % context if context else "")
+                + verb_line
+                + "\n".join("%d. %s" % (i + 1, b) for i, b in enumerate(bs)))
+
+    def _opener(s):
+        w = s.split(None, 1)
+        return w[0].strip(",.:-;").lower() if w else ""
+
+    data = _ask_json(_build(bullets))
     if not isinstance(data, dict):
         return [None] * len(bullets)
     mapping = data.get("rewrites", {})
-    out = []
+    out, rejected = [], []
     for i, b in enumerate(bullets):
         r = mapping.get(str(i + 1)) or mapping.get(i + 1)
         if r:
             r = str(r).strip()
             r = _fix_enum_counts(r)
             if _has_fabricated_number(r, b, context):
-                r = None  # keep the original: it can only be accurate
+                r = None  # unsafe rewrite - retried strictly below
         out.append(r or None)
+        if r is None:
+            rejected.append(i)
+    # A rejected rewrite would otherwise fall back to the ORIGINAL bullet,
+    # which keeps weak/passive openers in the resume.  Give those bullets one
+    # bounded strict retry (no new numbers) before keeping the original.
+    if rejected:
+        data2 = _ask_json(_build([bullets[i] for i in rejected], strict=True))
+        if isinstance(data2, dict):
+            m2 = data2.get("rewrites", {})
+            for k, i in enumerate(rejected):
+                r = m2.get(str(k + 1)) or m2.get(k + 1)
+                if r:
+                    r = str(r).strip()
+                    r = _fix_enum_counts(r)
+                    if not _has_fabricated_number(r, bullets[i], context):
+                        out[i] = r
+    # Enforce the two-max opener cap deterministically: the count signal
+    # constrains verbs used by EARLIER entries, but a single batch can still
+    # return 3+ bullets opening with the same verb.  Re-ask for the excess.
+    opener_counts = {}
+    for r in out:
+        if r:
+            v = _opener(r)
+            opener_counts[v] = opener_counts.get(v, 0) + 1
+    over = [v for v, c in opener_counts.items() if c > 2]
+    if over:
+        seen = {}
+        retry_idx = []
+        for i, r in enumerate(out):
+            if not r:
+                continue
+            v = _opener(r)
+            if v in over:
+                seen[v] = seen.get(v, 0) + 1
+                if seen[v] > 2:  # keep the first two occurrences
+                    retry_idx.append(i)
+        if retry_idx:
+            extra = ("BANNED opening verbs (already used twice in this resume): "
+                     "%s\n" % ", ".join(over))
+            data3 = _ask_json(_build([bullets[i] for i in retry_idx],
+                                     strict=True, extra=extra))
+            if isinstance(data3, dict):
+                m3 = data3.get("rewrites", {})
+                for k, i in enumerate(retry_idx):
+                    r = m3.get(str(k + 1)) or m3.get(k + 1)
+                    if r:
+                        r = str(r).strip()
+                        r = _fix_enum_counts(r)
+                        if (not _has_fabricated_number(r, bullets[i], context)
+                                and _opener(r) not in over):
+                            out[i] = r
     return out
 
 

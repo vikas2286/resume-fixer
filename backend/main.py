@@ -299,7 +299,7 @@ def rewrite(sid: str, request: Request):
     summary_text = " ".join(
         (sec.get("text") or "") for sec in structured.get("sections", [])
         if sec.get("type") == "paragraph")[:400]
-    used_verbs = set()
+    used_verbs = {}  # opener verb -> times used so far (document-wide cap: 2)
     changed = 0
     for sec in structured.get("sections", []):
         if sec.get("type") != "entries":
@@ -326,7 +326,8 @@ def rewrite(sid: str, request: Request):
             for b in new_bullets:
                 w = b.split(None, 1)
                 if w:
-                    used_verbs.add(w[0].strip(",.:-;").lower())
+                    v = w[0].strip(",.:-;").lower()
+                    used_verbs[v] = used_verbs.get(v, 0) + 1
     session_store.update(sid, structured_override=structured, rewritten=True)
     return {"ok": True, "bullets_rewritten": changed}
 
